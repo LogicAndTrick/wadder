@@ -1,6 +1,7 @@
 ﻿using System;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using Wadder.Bsp;
 
@@ -17,7 +18,8 @@ namespace Wadder
                 Console.WriteLine(@"Or drag a bsp file onto Wadder.exe in explorer");
                 Environment.Exit(0);
             }
-            int created = 0;
+
+            var created = 0;
 
             foreach (var file in args)
             {
@@ -39,39 +41,42 @@ namespace Wadder
                 if (File.Exists(file))
                 {
                     Console.WriteLine($"Map: {Path.GetFileName(file)}");
-                    using (var s = File.OpenRead(file))
-                    {
-                        var bsp = new Bsp.Bsp(s);
-                        var bel = new BspEntityLump(bsp.GetLump(LumpType.Entities), s);
 
-                        var ws = bel.Entities.FirstOrDefault(x => x.Get("classname") == "worldspawn");
-                        if (ws != null)
+                    try
+                    {
+                        using (var s = File.OpenRead(file))
                         {
-                            var wadline = ws.Get("wad");
-                            var wads = wadline.Split(';');
-                            foreach (var wad in wads.Where(x => !String.IsNullOrWhiteSpace(x)))
+                            var bsp = new Bsp.Bsp(s);
+                            var bel = new BspEntityLump(bsp.GetLump(LumpType.Entities), s);
+
+                            var ws = bel.Entities.FirstOrDefault(x => x.Get("classname") == "worldspawn");
+                            if (ws != null)
                             {
-                                var fi = new FileInfo(Path.Combine(Environment.CurrentDirectory, wad));
-                                if (!foundWads.Contains(fi.Name, StringComparer.InvariantCultureIgnoreCase))
+                                var wadline = ws.Get("wad");
+                                var wads = wadline.Split(';');
+                                foreach (var wad in wads.Where(x => !String.IsNullOrWhiteSpace(x)))
                                 {
-                                    Console.WriteLine($"{fi.Name}: Not found, creating...");
-                                    using (var o = File.OpenWrite(Path.Combine(modDir, fi.Name)))
+                                    var fi = new FileInfo(Path.Combine(Environment.CurrentDirectory, wad));
+                                    if (!foundWads.Contains(fi.Name, StringComparer.InvariantCultureIgnoreCase))
                                     {
-                                        using (var ew = EmptyWad())
-                                        {
-                                            ew.CopyTo(o);
-                                        }
+                                        Console.WriteLine($"{fi.Name}: Not found, creating...");
+                                        CreateEmptyWad(Path.Combine(modDir, fi.Name));
+
+                                        modWads.Add(fi.Name);
+                                        foundWads.Add(fi.Name);
+                                        created++;
                                     }
-                                    modWads.Add(fi.Name);
-                                    foundWads.Add(fi.Name);
-                                    created++;
-                                }
-                                else
-                                {
-                                    Console.WriteLine($"{fi.Name}: Found");
+                                    else
+                                    {
+                                        Console.WriteLine($"{fi.Name}: Found");
+                                    }
                                 }
                             }
                         }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Error: {ex.Message}\n{ex.StackTrace}");
                     }
                 }
             }
@@ -82,20 +87,10 @@ namespace Wadder
             Console.ReadKey();
         }
 
-        static Stream EmptyWad()
+        static void CreateEmptyWad(string file)
         {
-            var ms = new MemoryStream();
-
-            using (var bw = new BinaryWriter(ms, Encoding.ASCII, true))
-            {
-                bw.Write("WAD3");
-                bw.Write(0u);
-                bw.Write(12u);
-            }
-
-            ms.Seek(0, SeekOrigin.Begin);
-
-            return ms;
+            var empty = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "empty.wad");
+            File.Copy(empty, file);
         }
     }
 }
